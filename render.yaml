@@ -1,0 +1,5 @@
+services:
+  - type: cron
+    name: telegram-bot
+    schedule: "*/30 * * * *"  # кожні 30 хвилин
+    command: "python bot.py"
