@@ -1,19 +1,25 @@
 import requests
 import re
 import time
-import os
 import json
+import os
 from bs4 import BeautifulSoup
 
-# 📌 Конфігурація
-token = os.getenv("TG_TOKEN") or "тут_можеш_вставити_токен_для_тесту"
-chat_id = os.getenv("TG_CHAT_ID") or "-1001498779171"
+# === 📌 Конфігурація ===
+token = os.getenv("TG_TOKEN")
+chat_id = os.getenv("TG_CHAT_ID")
 novelty_page_url = "https://pp-books.com.ua/novynka/?orderby=date&paged=1"
-
-# Файл для збереження відправлених товарів
 SENT_FILE = "sent_items.json"
 
-# 📖 Завантаження відправлених посилань
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/123.0.0.0 Safari/537.36"
+    )
+}
+
+# === 📁 Робота з пам’яттю ===
 def load_sent_links():
     if os.path.exists(SENT_FILE):
         try:
@@ -24,24 +30,16 @@ def load_sent_links():
                 return set(json.loads(content))
         except Exception as e:
             print(f"[⚠️] Не вдалося прочитати {SENT_FILE}: {e}")
-            return set()
     return set()
 
-
-# 💾 Збереження оновленого списку
 def save_sent_links(links):
-    with open(SENT_FILE, "w", encoding="utf-8") as f:
-        json.dump(list(links), f, ensure_ascii=False, indent=2)
+    try:
+        with open(SENT_FILE, "w", encoding="utf-8") as f:
+            json.dump(list(links), f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[❌] Помилка збереження {SENT_FILE}: {e}")
 
-# 🔖 HTTP-заголовок браузера
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/123.0.0.0 Safari/537.36"
-    )
-}
-
+# === 🌐 Парсинг сторінки ===
 def get_html(url):
     try:
         response = requests.get(url, headers=HEADERS, timeout=10)
@@ -59,14 +57,15 @@ def get_latest_items():
     soup = BeautifulSoup(html, "html.parser")
     items = soup.select("div.product-element-top.wd-quick-shop")
 
-    links, images = [], []
+    links = []
+    images = []
 
     for item in items:
         a_tag = item.find("a", href=True)
         img_tag = item.find("img")
 
-        links.append(a_tag["href"] if a_tag else "")
-        images.append(img_tag.get("src") if img_tag else "")
+        links.append(a_tag["href"] if a_tag and a_tag["href"] else "")
+        images.append(img_tag["src"] if img_tag and img_tag.get("src") else "")
 
     return links, images
 
@@ -89,6 +88,7 @@ def get_image_from_html(html):
         return url
     return None
 
+# === 📤 Надсилання ===
 def send_telegram(payload, is_photo=True):
     endpoint = "/sendPhoto" if is_photo else "/sendMessage"
     url = f"https://api.telegram.org/bot{token}{endpoint}"
@@ -98,14 +98,16 @@ def send_telegram(payload, is_photo=True):
     except Exception as e:
         print(f"[❌] Помилка надсилання повідомлення: {e}")
 
+# === 🚀 Основна логіка ===
 def send_new_items():
     item_links, image_links = get_latest_items()
+
     if not item_links:
         print("❗️ Не знайдено новинок.")
         return
 
     sent_links = load_sent_links()
-    new_sent = set()
+    new_sent_links = set(sent_links)
 
     for i in range(len(item_links)):
         item_url = item_links[i].strip()
@@ -142,12 +144,10 @@ def send_new_items():
             payload["text"] = message
             send_telegram(payload, is_photo=False)
 
-        new_sent.add(item_url)
+        new_sent_links.add(item_url)
         time.sleep(1)
 
-    if new_sent:
-        save_sent_links(sent_links.union(new_sent))
-
+    save_sent_links(new_sent_links)
     print("✅ Готово.")
 
 # ▶️ Запуск
