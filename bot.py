@@ -16,9 +16,17 @@ SENT_FILE = "sent_items.json"
 # 📖 Завантаження відправлених посилань
 def load_sent_links():
     if os.path.exists(SENT_FILE):
-        with open(SENT_FILE, "r", encoding="utf-8") as f:
-            return set(json.load(f))
+        try:
+            with open(SENT_FILE, "r", encoding="utf-8") as f:
+                content = f.read().strip()
+                if not content:
+                    return set()
+                return set(json.loads(content))
+        except Exception as e:
+            print(f"[⚠️] Не вдалося прочитати {SENT_FILE}: {e}")
+            return set()
     return set()
+
 
 # 💾 Збереження оновленого списку
 def save_sent_links(links):
